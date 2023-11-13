@@ -29,6 +29,9 @@ private:
 	ComPtr<ID3D11Buffer>			_vertexBuffer;
 	ComPtr<ID3D11Buffer>			_indexBuffer;
 
+	ComPtr<ID3D11Buffer>			_pyramidVertexBuffer;
+	ComPtr<ID3D11Buffer>			_pyramidIndexBuffer;
+
 	ComPtr<ID3DBlob>				_vertexShaderByteCode = nullptr;
 	ComPtr<ID3DBlob>				_pixelShaderByteCode = nullptr;
 	ComPtr<ID3D11VertexShader>		_vertexShader;
@@ -42,14 +45,16 @@ private:
 	Vector3							_focalPointPosition;
 	Vector3							_upVector;
 
-	Vector3                         _cubePosition;
-
 	// The default constructor for the Matrix class initialises the matrix to the Identity matrix.  
+	// This is sufficient for _worldTransformation for this example.  The other two are set in the
+	// Render method.
 
 	Matrix							_worldTransformation;
-	Matrix							_worldTransformation2;
+	Matrix							_pyramidWorldTransformation;
 	Matrix							_viewTransformation;
 	Matrix							_projectionTransformation;
+
+	int								_rotationAngle{ 0 };
 
 	bool GetDeviceAndSwapChain();
 	void BuildGeometryBuffers();
@@ -57,7 +62,6 @@ private:
 	void BuildVertexLayout();
 	void BuildConstantBuffer();
 	void BuildRasteriserState();
-
-	float _rotationAngle;
+	void BuildGeometryBuffersPyramid();
 };
 
