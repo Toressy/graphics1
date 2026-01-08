@@ -1,4 +1,4 @@
- #include "DirectXApp.h"
+#include "DirectXApp.h"
 
 // Geometry.h contains the vertex and constant buffer structures
 // as well as the vertices and indices for a cube
@@ -11,14 +11,13 @@
 
 DirectXApp app;
 
-DirectXApp::DirectXApp() : Framework(800, 600), _rotationAngle(0.0f)
+DirectXApp::DirectXApp() : Framework(800, 600)
 {
 	// Initialise vectors used to create camera.  We will look
 	// at this in detail later
 	_eyePosition = Vector3(0.0f, 0.0f, -10.0f);
 	_focalPointPosition = Vector3(0.0f, 0.0f, 0.0f);
 	_upVector = Vector3(0.0f, 1.0f, 0.0f);
-
 }
 
 bool DirectXApp::Initialise()
@@ -39,46 +38,14 @@ bool DirectXApp::Initialise()
 
 void DirectXApp::Update()
 {
-	// This is where you would update world transformations
-	/*_rotationAngle += XMConvertToRadians(1.0f);
-	Matrix rotationMatrix = Matrix::CreateRotationZ(_rotationAngle);
-	_worldTransformation = rotationMatrix;*/
+	//_worldTransformation = Matrix::CreateRotationY(_rotationAngle * XM_PI / 180.0f);
+	//_rotationAngle = (_rotationAngle + 1) % 360;
 
-	 /*
-	_rotationAngle += XMConvertToRadians(1.0f);
-	Matrix rotationMatrix = Matrix::CreateRotationY(_rotationAngle);
-	// Update the cube's position to make it move towards the right
-	_cubePosition.x += 0.01f; // Adjust the speed as needed
-	
+	_worldTransformation = Matrix::CreateRotationY(_rotationAngle * XM_PI / 180.0f);
+	_pyramidWorldTransformation = Matrix::CreateRotationY((_rotationAngle + 45) * XM_PI / 180.0f);
+	_rotationAngle = (_rotationAngle + 1) % 360;
+}
 
-	Matrix translationMatrix = Matrix::CreateTranslation(_cubePosition);
-
-	// Combine rotation and translation
-	_worldTransformation = rotationMatrix * translationMatrix;*/
-
-	//Update the program so that the cube rotates one degree around the Z axis each frame, but is always
-	//2 units away from the origin(i.e.it does a wide circle around the Z axis).
-
-	/*_rotationAngle += XMConvertToRadians(1.0f);
-	Matrix rotationMatrix = Matrix::CreateRotationZ(_rotationAngle);
-
-
-	// Combine rotation and translation
-	_worldTransformation =  Matrix::CreateTranslation(Vector3(2, 0, 0)) * rotationMatrix;*/
-
-	_worldTransformation = Matrix::CreateRotationY(_rotationAngle)* Matrix::CreateTranslation(Vector3(0, 2, 0));
-	_worldTransformation2 = Matrix::CreateRotationY(-_rotationAngle) ;
-	_rotationAngle += XMConvertToRadians(1.0f);
-
-
-
-
-
-	 
-
-
-} 
- 
 void DirectXApp::Render()
 {
 	const float clearColour[] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -97,6 +64,11 @@ void DirectXApp::Render()
 	// Update the constant buffer. Note the layout of the constant buffer must match that in the shader
 	_deviceContext->VSSetConstantBuffers(0, 1, _constantBuffer.GetAddressOf());
 	_deviceContext->UpdateSubresource(_constantBuffer.Get(), 0, 0, &constantBuffer, 0, 0);
+
+	/*CBuffer cubeConstantBuffer;
+	cubeConstantBuffer.WorldViewProjection = _cubeWorldTransformation * _viewTransformation * _projectionTransformation;
+	_deviceContext->UpdateSubresource(_constantBuffer.Get(), 0, 0, &cubeConstantBuffer, 0, 0);*/
+
 
 	// Now render the cube
 	// Specify the distance between vertices and the starting point in the vertex buffer
@@ -119,18 +91,43 @@ void DirectXApp::Render()
 	// Specify details about how the object is to be drawn
 	_deviceContext->RSSetState(_rasteriserState.Get());
 
-	// Now draw the object
+	// Now draw the first cube
 	_deviceContext->DrawIndexed(ARRAYSIZE(indices), 0, 0);
 
+	Matrix pyramidCompleteTransformation = _pyramidWorldTransformation * _viewTransformation * _projectionTransformation;
+	CBuffer pyramidConstantBuffer;
+	pyramidConstantBuffer.WorldViewProjection = pyramidCompleteTransformation;
+	_deviceContext->UpdateSubresource(_constantBuffer.Get(), 0, 0, &pyramidConstantBuffer, 0, 0);
+
+	// Now render the cube
+	// Specify the distance between vertices and the starting point in the vertex buffer
 	
-	Matrix completeTransformation2 = _worldTransformation2 * _viewTransformation * _projectionTransformation;
-	constantBuffer.WorldViewProjection = completeTransformation2;
-	_deviceContext->UpdateSubresource(_constantBuffer.Get(), 0, 0, &constantBuffer, 0, 0);
-	_deviceContext->DrawIndexed(ARRAYSIZE(indices), 0, 0);
+	// Set the vertex buffer and index buffer we are going to use
+	_deviceContext->IASetVertexBuffers(0, 1, _pyramidVertexBuffer.GetAddressOf(), &stride, &offset);
+	_deviceContext->IASetIndexBuffer(_pyramidIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+
+	// Specify the layout of the polygons (it will rarely be different to this)
+	_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Specify the layout of the input vertices.  This must match the layout of the input vertices in the shader
+	_deviceContext->IASetInputLayout(_layout.Get());
+
+	// Specify the vertex and pixel shaders we are going to use
+	_deviceContext->VSSetShader(_vertexShader.Get(), 0, 0);
+	_deviceContext->PSSetShader(_pixelShader.Get(), 0, 0);
+
+	// Specify details about how the object is to be drawn
+	_deviceContext->RSSetState(_rasteriserState.Get());
+
+	// Now draw the pyramid
+	_deviceContext->DrawIndexed(ARRAYSIZE(pyramidIndices), 0, 0);
+
+
+
+
 
 	// Update the window
 	ThrowIfFailed(_swapChain->Present(0, 0));
-
 }
 
 // OnResize is called by the framework whenever Windows gets a WM_Size message. We need to recreate
@@ -138,7 +135,6 @@ void DirectXApp::Render()
 
 void DirectXApp::OnResize(WPARAM wParam)
 {
-	// Do not resize the buffer if the window is minimised
 	if (wParam == SIZE_MINIMIZED)
 	{
 		return;
@@ -294,10 +290,45 @@ void DirectXApp::BuildGeometryBuffers()
 	D3D11_SUBRESOURCE_DATA indexInitialisationData;
 	indexInitialisationData.pSysMem = &indices;
 
-	// and create the index buffer
-	ThrowIfFailed(_device->CreateBuffer(&indexBufferDescriptor, &indexInitialisationData, _indexBuffer.GetAddressOf()));
+	
+	
+	BuildGeometryBuffersPyramid();
+	
 
+}
+void DirectXApp::BuildGeometryBuffersPyramid()
+{
+	// Setup the structure that specifies how big the vertex buffer should be
+	D3D11_BUFFER_DESC pyramidVertexBufferDesc = { 0 };
+	pyramidVertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	pyramidVertexBufferDesc.ByteWidth = sizeof(Vertex) * ARRAYSIZE(pyramidVertices);
+	pyramidVertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	pyramidVertexBufferDesc.CPUAccessFlags = 0;
+	pyramidVertexBufferDesc.MiscFlags = 0;
+	pyramidVertexBufferDesc.StructureByteStride = 0;
 
+	// Now set up a structure that tells DirectX where to get the data for the vertices from
+	D3D11_SUBRESOURCE_DATA pyramidVertexInitialisationData = { 0 };
+	pyramidVertexInitialisationData.pSysMem = &pyramidVertices;
+
+	// Create the vertex buffer for the pyramid
+	ThrowIfFailed(_device->CreateBuffer(&pyramidVertexBufferDesc, &pyramidVertexInitialisationData, _pyramidVertexBuffer.GetAddressOf()));
+
+	// Setup the structure that specifies how big the index buffer should be
+	D3D11_BUFFER_DESC pyramidIndexBufferDesc = { 0 };
+	pyramidIndexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	pyramidIndexBufferDesc.ByteWidth = sizeof(UINT) * ARRAYSIZE(pyramidIndices);
+	pyramidIndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	pyramidIndexBufferDesc.CPUAccessFlags = 0;
+	pyramidIndexBufferDesc.MiscFlags = 0;
+	pyramidIndexBufferDesc.StructureByteStride = 0;
+
+	// Now set up a structure that tells DirectX where to get the data for the indices from
+	D3D11_SUBRESOURCE_DATA pyramidIndexInitialisationData;
+	pyramidIndexInitialisationData.pSysMem = &pyramidIndices;
+
+	// Create the index buffer for the pyramid
+	ThrowIfFailed(_device->CreateBuffer(&pyramidIndexBufferDesc, &pyramidIndexInitialisationData, _pyramidIndexBuffer.GetAddressOf()));
 }
 
 void DirectXApp::BuildShaders()
@@ -376,6 +407,6 @@ void DirectXApp::BuildRasteriserState()
 	rasteriserDesc.MultisampleEnable = false;
 	rasteriserDesc.AntialiasedLineEnable = false;
 	// The following tells the rasteriser to draw a wireframe model.  For solid models, set it to D3D11_FILL_SOLID
-	rasteriserDesc.FillMode = D3D11_FILL_WIREFRAME;
+	rasteriserDesc.FillMode = D3D11_FILL_SOLID;
 	ThrowIfFailed(_device->CreateRasterizerState(&rasteriserDesc, _rasteriserState.GetAddressOf()));
 }
